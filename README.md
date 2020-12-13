@@ -28,6 +28,8 @@
 }
 ```
 
+The minimum time is 0.25 seconds due to how the prefab spawning is implemented
+
 ## For Developers
 
 ### Hooks
