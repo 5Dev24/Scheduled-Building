@@ -7,20 +7,23 @@ using System;
 
 namespace Oxide.Plugins
 {
-	[Info("Scheduled Building", "5Dev24", "0.0.0")]
+
+	[Info("Scheduled Building", "5Dev24", "1.0.0")]
 	[Description("Spawns prefabs on timers")]
 	public class ScheduledBuilding : RustPlugin
 	{
 
+		private const string GetPositionPermission = "scheduledbuilding.getposition";
+		private const string CreateNewPrefabPermission = "scheduledbuilding.createprefab";
 		private Coroutine routine;
 		private ConfigData data;
-		private const string GetPositionPermission = "scheduledbuilding.getposition";
 
 		#region Hooks
 
 		private void Loaded()
 		{
 			this.permission.RegisterPermission(ScheduledBuilding.GetPositionPermission, this);
+			this.permission.RegisterPermission(ScheduledBuilding.CreateNewPrefabPermission, this);
 		}
 
 		private void OnServerInitialized()
@@ -33,21 +36,28 @@ namespace Oxide.Plugins
 			if (this.routine != null)
 			{
 				ServerMgr.Instance?.StopCoroutine(this.routine);
+
+				foreach (ConfigData.PrefabData prefab in this.data.Prefabs)
+					if (prefab.Name != null)
+					{
+						GameObject found = GameObject.Find(prefab.Name);
+						if (found != null)
+							GameObject.Destroy(found);
+					}
+
 				this.routine = null;
 			}
 		}
 
 		#endregion
 
-		#region Command
+		#region Commands
 
 		[ChatCommand("getposition")]
 		private void GetPositionCommand(BasePlayer player, string cmd, string[] args)
 		{
-			if (!player.IsAdmin && !this.permission.UserHasPermission(player.UserIDString, ScheduledBuilding.GetPositionPermission))
-			{
+			if (!this.HasPermission(player, ScheduledBuilding.GetPositionPermission))
 				SendReply(player, this.lang.GetMessage("No Permission", this, player.UserIDString));
-			}
 			else
 			{
 				Vector3 position = player.transform.position;
@@ -57,6 +67,50 @@ namespace Oxide.Plugins
 					.Replace("{z1}", position.z.ToString()).Replace("{x2}", rotation.x.ToString())
 					.Replace("{y2}", rotation.y.ToString()).Replace("{z2}", rotation.z.ToString())
 					.Replace("{w2}", rotation.w.ToString())); // Nasty
+			}
+		}
+
+		[ChatCommand("createprefab")]
+		private void CreatePrefabCommand(BasePlayer player, string cmd, string[] args)
+		{
+			if (!this.HasPermission(player, ScheduledBuilding.CreateNewPrefabPermission))
+				SendReply(player, this.lang.GetMessage("No Permission", this, player.UserIDString));
+			else
+			{
+				Vector3 position = player.transform.position;
+				Quaternion rotation = player.eyes.rotation;
+
+				List<ConfigData.PrefabData> prefabsList = new List<ConfigData.PrefabData>(this.data.Prefabs);
+				prefabsList.Add(new ConfigData.PrefabData
+				{
+					Location = position,
+					Rotation = rotation
+				});
+				ConfigData.PrefabData[] prefabs = prefabsList.ToArray();
+				prefabsList = null;
+
+				Config.WriteObject(new ConfigData
+				{
+					Prefabs = prefabs
+				}, true);
+
+				SendReply(player, this.lang.GetMessage("Created Prefab", this, player.UserIDString)
+					.Replace("{x}", position.x.ToString()).Replace("{y}", position.y.ToString())
+					.Replace("{z}", position.y.ToString()));
+			}
+		}
+
+		[ChatCommand("showprefabs")]
+		private void ShowPrefabsCommand(BasePlayer player, string cmd, string[] args)
+		{
+			if (!player.IsAdmin)
+				SendReply(player, this.lang.GetMessage("No Permission", this, player.UserIDString));
+			else
+			{
+				foreach (ConfigData.PrefabData prefab in this.data.Prefabs)
+					player.SendConsoleCommand("ddraw.sphere", 30, UnityEngine.Color.cyan, prefab.Location, 1f);
+
+				SendReply(player, this.lang.GetMessage("Shown Prefabs", this, player.UserIDString));
 			}
 		}
 
@@ -137,8 +191,18 @@ namespace Oxide.Plugins
 			lang.RegisterMessages(new Dictionary<string, string>
 			{
 				{"No Permission", "You don't have permission to use this command"},
-				{"Position Format", "You're at {x1} {y1} {z1} looking {x2} {y2} {z2} {w2}"}
+				{"Position Format", "You're at {x1} {y1} {z1} looking {x2} {y2} {z2} {w2}"},
+				{"Created Prefab", "Added new, empty prefab to config at {x} {y} {z}"},
+				{"Shown Prefabs", "All prefabs are now shown around the map for the next 30 seconds"}
 			}, this, "en");
+
+			lang.RegisterMessages(new Dictionary<string, string>
+			{
+				{"No Permission", "Vous n'êtes pas authorisé à utiliser cette commande"},
+				{"Position Format", "Vous êtes à {x1} {y1} {z1} en regardant {x2} {y2} {z2} {w2}"},
+				{"Created Prefab", "Ajout d'un nouveau préfabriqué vide à la configuration à {x} {y} {z}"},
+				{"Shown Prefabs", "Tous les préfabriqués sont maintenant affichés sur la carte pendant les 30 prochaines seconds"}
+			}, this, "fr");
 		}
 
 		protected override void LoadConfig()
@@ -170,7 +234,7 @@ namespace Oxide.Plugins
 				public uint Interval = 3600;
 
 				[JsonProperty("Check for previous")]
-				public bool PreviousCheck = false;
+				public bool PreviousCheck = true;
 
 				[JsonProperty("Should save")]
 				public bool ShouldSave = false;
@@ -184,7 +248,7 @@ namespace Oxide.Plugins
 
 			public PrefabData[] Prefabs = new PrefabData[0];
 
-			public string Version = "0.0.0";
+			public string Version = "1.0.0";
 		}
 
 		#endregion
@@ -224,20 +288,30 @@ namespace Oxide.Plugins
 
 			public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
 			{
-				throw new NotImplementedException();
+				if (value is Vector3)
+				{
+					Vector3 vector = (Vector3) value;
+					writer.WriteValue($"{vector.x} {vector.y} {vector.z}");
+				}
+				else if (value is Quaternion)
+				{
+					Quaternion rotation = (Quaternion) value;
+					writer.WriteValue($"{rotation.x} {rotation.y} {rotation.z} {rotation.w}");
+				}
 			}
 
 			public override bool CanConvert(Type objectType) =>
 				objectType == typeof(Vector3) || objectType == typeof(Quaternion);
-
-			public override bool CanWrite => false;
 		}
 
 		#endregion
 
-		#region Timing
+		#region Helpers
 
-		private static long Now() => DateTimeOffset.Now.ToUnixTimeSeconds();
+		private long Now() => DateTimeOffset.Now.ToUnixTimeSeconds();
+
+		private bool HasPermission(BasePlayer player, string permission) =>
+			player.IsAdmin || this.permission.UserHasPermission(player.UserIDString, permission);
 
 		#endregion
 
