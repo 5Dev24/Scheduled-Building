@@ -11,7 +11,7 @@
 
 * `/getposition` -- Prints out the player's position on rotation
 * `/createprefab` -- Adds a new prefab to the config with the player's current position and rotation
-* `/viewprefabs` -- Displays all prefab locations and requires admin permissions
+* `/showprefabs` -- Displays all prefab locations and requires admin permissions
 
 ## Configuration
 
