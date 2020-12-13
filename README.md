@@ -5,10 +5,13 @@
 ## Permissions
 
 * `scheduledbuilding.getposition` -- Allows players to use /getposition
+* `scheduledbuilding.createprefab` -- Allows players to use /createprefab
 
 ## Commands
 
 * `/getposition` -- Prints out the player's position on rotation
+* `/createprefab` -- Adds a new prefab to the config with the player's current position and rotation
+* `/viewprefabs` -- Displays all prefab locations and requires admin permissions
 
 ## Configuration
 
@@ -29,6 +32,8 @@
 ```
 
 The minimum time is 0.25 seconds due to how the prefab spawning is implemented
+
+I'd recommend [Orange's list of prefabs](https://github.com/OrangeWulf/Rust-Docs/) for finding prefabs
 
 ## For Developers
 
